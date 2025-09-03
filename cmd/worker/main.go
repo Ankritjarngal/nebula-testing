@@ -6,10 +6,20 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"runtime"
 	"time"
 
 	"github.com/aym-n/nebula/types"
 )
+
+type SysInfo struct {
+	WorkerID string
+	OS       string
+	Arch     string
+	CPUs     int
+	Hostname string
+}
 
 func main() {
 	masterAddress := "localhost:8080"
@@ -19,9 +29,27 @@ func main() {
 	}
 	defer conn.Close()
 
-	fmt.Printf("Successfully connected to master at %s\n", masterAddress)
+	fmt.Printf("✅ Successfully connected to master at %s\n", masterAddress)
 
+	sendSystemInfo(conn)
 	workerLoop(conn)
+}
+
+func sendSystemInfo(conn net.Conn) {
+	enc := gob.NewEncoder(conn)
+
+	hostname, _ := os.Hostname()
+	info := SysInfo{
+		WorkerID: "worker-123",
+		OS:       runtime.GOOS,
+		Arch:     runtime.GOARCH,
+		CPUs:     runtime.NumCPU(),
+		Hostname: hostname,
+	}
+
+	if err := enc.Encode(types.Message{Type: types.SysInfoMsg, Payload: encodeGob(info)}); err != nil {
+		log.Println("Error sending system info:", err)
+	}
 }
 
 func workerLoop(conn net.Conn) {
@@ -29,6 +57,7 @@ func workerLoop(conn net.Conn) {
 	enc := gob.NewEncoder(conn)
 
 	for {
+		// ask for a task
 		req := types.TaskRequest{WorkerID: "worker-123"}
 		if err := enc.Encode(types.Message{Type: types.RequestTask, Payload: encodeGob(req)}); err != nil {
 			log.Println("Error encoding task request:", err)
@@ -48,8 +77,8 @@ func workerLoop(conn net.Conn) {
 				break
 			}
 
-			// PlaceHolder
-			log.Printf("Worker processing task: %s", task.TaskID)
+			// simulate work
+			log.Printf("⚙️ Worker processing task: %s", task.TaskID)
 			time.Sleep(1 * time.Second)
 
 			result := types.ResultSubmission{
